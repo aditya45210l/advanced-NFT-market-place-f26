@@ -29,6 +29,13 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
         address _seller
     );
 
+    event NftBought(
+        address indexed _nftAddress,
+        uint256 indexed _tokenId,
+        uint256 indexed _price,
+        address _buyer
+    );
+
     mapping(address _nftAddress => mapping(uint256 _tokenId => Listing))
         public listings;
 
@@ -80,7 +87,7 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
     function buyNft(
         address _nftContract,
         uint256 _tokenId
-    ) public payable nonReentrant {
+    ) public payable nonReentrant returns(bool) {
         // IERC721 nftContract = IERC721(_nftContract);
         if (_nftContract == address(0))
             revert AdvancedNftMarketPlace__InvalidContractAddress();
@@ -90,10 +97,11 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
         if (!(msg.value >= listings[_nftContract][_tokenId].price)) {
             revert AdvancedNftMarketPlace__AmountMustBeAboveZero();
         }
-        _safeBuyNft(_nftContract, _tokenId);
+        bool status =  _safeBuyNft(_nftContract, _tokenId);
+        return status;
     }
 
-    function _safeBuyNft(address _nftContract, uint256 _tokenId) internal {
+    function _safeBuyNft(address _nftContract, uint256 _tokenId) internal returns(bool) {
         Listing memory listItem = listings[_nftContract][_tokenId];
 
         IERC721(_nftContract).safeTransferFrom(
@@ -102,10 +110,12 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
             _tokenId
         );
 
-        (bool succes, ) = listItem.seller.call{value: listItem.price}("");
+        (bool success, ) = listItem.seller.call{value: listItem.price}("");
 
-        require(succes, AdvancedNftMarketPlace__EthTransferFailed());
+        require(success, AdvancedNftMarketPlace__EthTransferFailed());
+        emit NftBought(_nftContract, _tokenId, listItem.price, msg.sender);
         delete listings[_nftContract][_tokenId];
+        return success;
     }
 
     //Getter Functions
