@@ -1,6 +1,6 @@
-import NFTCard from "@/components/Cards/Cards";
+import NFTCard from "@/components/Layout/Cards";
 
-const Home = () => {
+const MarketPNftContainer = () => {
   const nftArray: number[] = Array.from({ length: 5 }, (_, i) => i + 1);
 
   if (nftArray.length === 0) {
@@ -12,7 +12,7 @@ const Home = () => {
   }
 
   return (
-    <div className="grid xl:grid-cols-5 lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-7  pt-4">
+    <div className="grid xl:grid-cols-5 lg:grid-cols-4 md:grid-cols-3 sm:grid-cols-2 grid-cols-1 gap-7 pt-5">
       {nftArray.map((id: number) => (
         <NFTCard
           id={String(id)}
@@ -26,4 +26,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default MarketPNftContainer;
