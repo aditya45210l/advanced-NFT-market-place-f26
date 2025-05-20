@@ -36,8 +36,43 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
         address _buyer
     );
 
+    event NftCanceled(
+        address indexed _nftAddress,
+        uint256 indexed _tokenId,
+        address indexed _seller
+    );
+    event NftUpdated(
+        address indexed _nftAddress,
+        uint256 indexed _tokenId,
+        uint256 indexed _newPrice,
+        address _seller
+    );
+
     mapping(address _nftAddress => mapping(uint256 _tokenId => Listing))
         public listings;
+
+    modifier isOwner(address _nftAddress, uint256 _tokenId) {
+        Listing memory _listItem = listings[_nftAddress][_tokenId];
+        if (_listItem.seller != msg.sender) {
+            revert AdvancedNftMarketPlace__NotOwner(
+                _listItem.seller,
+                msg.sender
+            );
+        }
+        _;
+    }
+
+    modifier isListed(address _nftAddress, uint256 _tokenId) {
+        Listing memory _listItem = listings[_nftAddress][_tokenId];
+        if (_listItem.price == 0) {
+            revert AdvancedNftMarketPlace__NftNotListed();
+        }
+        _;
+    }
+
+    /***
+     *   Main Functions
+     */
 
     function listNft(
         address _nftAddress,
@@ -75,33 +110,35 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
         IERC721 _nftContract = IERC721(_nftAddress);
 
         _nftContract.transferFrom(msg.sender, address(this), _tokenId);
-        emit NftListed(_nftAddress,_tokenId,_price,msg.sender);
+        emit NftListed(_nftAddress, _tokenId, _price, msg.sender);
 
         listings[_nftAddress][_tokenId] = Listing({
             seller: payable(msg.sender),
             price: _price
         });
-
     }
 
     function buyNft(
         address _nftContract,
         uint256 _tokenId
-    ) public payable nonReentrant returns(bool) {
+    ) public payable nonReentrant returns (bool) {
         // IERC721 nftContract = IERC721(_nftContract);
+        Listing memory _listItem = listings[_nftContract][_tokenId];
         if (_nftContract == address(0))
             revert AdvancedNftMarketPlace__InvalidContractAddress();
-        if (listings[_nftContract][_tokenId].price == 0)
-            revert AdvancedNftMarketPlace__NftNotListed();
+        if (_listItem.price == 0) revert AdvancedNftMarketPlace__NftNotListed();
 
-        if (!(msg.value >= listings[_nftContract][_tokenId].price)) {
+        if (!(msg.value >= _listItem.price)) {
             revert AdvancedNftMarketPlace__AmountMustBeAboveZero();
         }
-        bool status =  _safeBuyNft(_nftContract, _tokenId);
+        bool status = finalizePurchase(_nftContract, _tokenId);
         return status;
     }
 
-    function _safeBuyNft(address _nftContract, uint256 _tokenId) internal returns(bool) {
+    function finalizePurchase(
+        address _nftContract,
+        uint256 _tokenId
+    ) internal returns (bool) {
         Listing memory listItem = listings[_nftContract][_tokenId];
 
         IERC721(_nftContract).safeTransferFrom(
@@ -112,10 +149,39 @@ contract AdvancedNftMarketPlace is ReentrancyGuard {
 
         (bool success, ) = listItem.seller.call{value: listItem.price}("");
 
-        require(success, AdvancedNftMarketPlace__EthTransferFailed());
+        if (!success) revert AdvancedNftMarketPlace__EthTransferFailed();
+
         emit NftBought(_nftContract, _tokenId, listItem.price, msg.sender);
         delete listings[_nftContract][_tokenId];
         return success;
+    }
+
+    function CancelListing(
+        address _nftAddress,
+        uint256 _tokenId
+    ) public isListed(_nftAddress, _tokenId) isOwner(_nftAddress, _tokenId) {
+        Listing memory _listItem = listings[_nftAddress][_tokenId];
+        IERC721(_nftAddress).safeTransferFrom(
+            address(this),
+            _listItem.seller,
+            _tokenId
+        );
+        delete listings[_nftAddress][_tokenId];
+        emit NftCanceled(_nftAddress, _tokenId, msg.sender);
+    }
+
+    function UpdateListing(
+        address _nftContract,
+        uint256 _tokenId,
+        uint256 _newPrice
+    ) public isListed(_nftContract, _tokenId) isOwner(_nftContract, _tokenId) {
+        if (_newPrice <= 0) {
+            revert AdvancedNftMarketPlace__AmountMustBeAboveZero(); //Test Done✅
+        }
+
+        listings[_nftContract][_tokenId].price = _newPrice;
+
+        emit NftUpdated(_nftContract, _tokenId, _newPrice, msg.sender);
     }
 
     //Getter Functions
